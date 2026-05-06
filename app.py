@@ -13,7 +13,7 @@ db.init_app(app)
 
 @app.route("/")
 def index():
-    return "App is running"
+    return render_template("login.html")
 
 # =============================================================================
 # CREATE TABLES (SAFE FOR LOCAL + DEPLOY)
