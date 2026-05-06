@@ -11,6 +11,10 @@ app.config.from_object(Config)
 
 db.init_app(app)
 
+@app.route("/")
+def index():
+    return "App is running"
+
 # =============================================================================
 # CREATE TABLES (SAFE FOR LOCAL + DEPLOY)
 # =============================================================================
