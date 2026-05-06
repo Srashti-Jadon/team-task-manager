@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from models import db, User, Project, Task
 from config import Config
 from datetime import datetime, date
+from functools import wraps
 import os
 
 app = Flask(__name__)
@@ -14,16 +15,17 @@ db.init_app(app)
 # =============================================================================
 
 def login_required(f):
+    @wraps(f)
     def wrap(*args, **kwargs):
         if 'user_id' not in session:
             flash('Please log in first', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
-    wrap.__name__ = f.__name__
     return wrap
 
 
 def admin_required(f):
+    @wraps(f)
     def wrap(*args, **kwargs):
         if 'user_id' not in session:
             flash('Please log in first', 'warning')
@@ -35,7 +37,6 @@ def admin_required(f):
             return redirect(url_for('dashboard'))
 
         return f(*args, **kwargs)
-    wrap.__name__ = f.__name__
     return wrap
 
 
@@ -61,7 +62,6 @@ def register():
         db.session.add(user)
         db.session.commit()
 
-        flash("Registered successfully", "success")
         return redirect(url_for('login'))
 
     return render_template("register.html")
@@ -70,12 +70,9 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        user = User.query.filter_by(username=request.form['username']).first()
 
-        user = User.query.filter_by(username=username).first()
-
-        if user and user.check_password(password):
+        if user and user.check_password(request.form['password']):
             session['user_id'] = user.id
             session['username'] = user.username
             session['role'] = user.role
@@ -91,10 +88,6 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-
-# =============================================================================
-# DASHBOARD
-# =============================================================================
 
 @app.route('/')
 @app.route('/dashboard')
@@ -120,10 +113,6 @@ def dashboard():
                            user=user)
 
 
-# =============================================================================
-# PROJECTS
-# =============================================================================
-
 @app.route('/projects')
 @login_required
 def projects():
@@ -141,13 +130,13 @@ def projects():
 @admin_required
 def create_project():
     if request.method == 'POST':
-        name = request.form['name']
-        description = request.form['description']
-
-        project = Project(name=name, description=description, user_id=session['user_id'])
+        project = Project(
+            name=request.form['name'],
+            description=request.form['description'],
+            user_id=session['user_id']
+        )
         db.session.add(project)
         db.session.commit()
-
         return redirect(url_for('projects'))
 
     return render_template("project_form.html")
@@ -157,15 +146,12 @@ def create_project():
 @login_required
 def project_detail(project_id):
     project = Project.query.get_or_404(project_id)
-
-    tasks = Task.query.filter(Task.project_id == project_id).all()
-
     user = User.query.get(session['user_id'])
 
-    # permission check (important)
     if not user.is_admin() and project.user_id != user.id:
-        flash("Access denied", "error")
         return redirect(url_for('projects'))
+
+    tasks = Task.query.filter_by(project_id=project_id).all()
 
     return render_template(
         "project_detail.html",
@@ -180,42 +166,24 @@ def project_detail(project_id):
 @admin_required
 def create_task(project_id):
     project = Project.query.get_or_404(project_id)
-
-    users = User.query.all()   # MUST be here for GET
+    users = User.query.all()
 
     if request.method == 'POST':
-        title = request.form['title']
-        description = request.form['description']
-        assigned_to_id = request.form['assigned_to_id']
-        status = request.form['status']
-        due_date_str = request.form['due_date']
-
-        if not title or not assigned_to_id or not due_date_str:
-            flash("Missing fields", "error")
-            return render_template('task_form.html', project=project, users=users)
-
-        due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
-
         task = Task(
-            title=title,
-            description=description,
-            assigned_to_id=int(assigned_to_id),
-            status=status,
-            due_date=due_date,
+            title=request.form['title'],
+            description=request.form['description'],
+            assigned_to_id=int(request.form['assigned_to_id']),
+            status=request.form['status'],
+            due_date=datetime.strptime(request.form['due_date'], '%Y-%m-%d').date(),
             project_id=project.id
         )
 
         db.session.add(task)
         db.session.commit()
-
         return redirect(url_for('project_detail', project_id=project.id))
 
     return render_template('task_form.html', project=project, users=users)
 
-
-# =============================================================================
-# TASKS
-# =============================================================================
 
 @app.route('/tasks')
 @login_required
@@ -223,11 +191,7 @@ def my_tasks():
     user = User.query.get(session['user_id'])
     tasks = Task.query.filter_by(assigned_to_id=user.id).all()
 
-    return render_template(
-        "tasks.html",
-        tasks=tasks,
-        current_date=date.today()
-    )
+    return render_template("tasks.html", tasks=tasks, current_date=date.today())
 
 
 @app.route('/task/<int:task_id>/update', methods=['POST'])
@@ -245,18 +209,9 @@ def update_task(task_id):
     return redirect(url_for('my_tasks'))
 
 
-# =============================================================================
-# TEST
-# =============================================================================
-
 @app.route('/test')
 def test():
     return "App is working"
-
-
-# =============================================================================
-# RUN (ONLY FOR LOCAL)
-# =============================================================================
 
 
 if __name__ == "__main__":
