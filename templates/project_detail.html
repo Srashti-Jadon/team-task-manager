@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>{{ project.name }}</h2>
+    {% if session.role == 'Admin' %}
+    <a href="{{ url_for('create_task', project_id=project.id) }}" class="btn btn-primary">➕ New Task</a>
+    {% endif %}
+</div>
+
+<p class="text-muted">{{ project.description }}</p>
+
+{% if tasks %}
+<table class="table table-hover">
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Assignee</th>
+            <th>Status</th>
+            <th>Due Date</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for task in tasks %}
+        <tr>
+            <td>{{ task.title }}</td>
+            <td>{{ task.assigned_to.username }}</td>
+            <td>
+                <span class="badge status-{{ task.status.lower().replace(' ', '-') }}">
+                    {{ task.status }}
+                </span>
+            </td>
+            <td>
+                {% if task.due_date %}
+                    <span class="{% if task.due_date < current_date and task.status != 'Done' %}text-danger fw-bold{% endif %}">
+                        {{ task.due_date.strftime('%Y-%m-%d') }}
+                    </span>
+                {% endif %}
+            </td>
+            <td>
+                {% if task.assigned_to_id == session.user_id or session.role == 'Admin' %}
+                <form method="POST" action="{{ url_for('update_task', task_id=task.id) }}" class="d-inline">
+                    <select name="status" class="form-select form-select-sm d-inline w-auto" onchange="this.form.submit()">
+                        <option value="Pending" {% if task.status == 'Pending' %}selected{% endif %}>Pending</option>
+                        <option value="In Progress" {% if task.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                        <option value="Done" {% if task.status == 'Done' %}selected{% endif %}>Done</option>
+                    </select>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="text-center py-5">
+    <h4>📭 No tasks yet</h4>
+    {% if session.role == 'Admin' %}
+    <a href="{{ url_for('create_task', project_id=project.id) }}" class="btn btn-primary btn-lg mt-3">Create First Task</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<a href="{{ url_for('projects') }}" class="btn btn-secondary mt-3">← Back to Projects</a>
+{% endblock %}

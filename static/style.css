@@ -1,0 +1,38 @@
+body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+
+.card {
+    border: none;
+    border-radius: 15px;
+}
+
+.navbar-brand {
+    font-weight: bold;
+    font-size: 1.5rem;
+}
+
+.stats-card {
+    background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.table th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+.status-pending { background-color: #fff3cd; color: #856404; }
+.status-progress { background-color: #d1ecf1; color: #0c5460; }
+.status-done { background-color: #d4edda; color: #155724; }
+
+.btn-task {
+    border-radius: 20px;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.75rem;
+}
