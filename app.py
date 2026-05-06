@@ -4,6 +4,7 @@ from models import db, User, Project, Task
 from config import Config
 from datetime import datetime, date
 from functools import wraps
+from flask import request, redirect, render_template
 import os
 
 app = Flask(__name__)
@@ -11,9 +12,17 @@ app.config.from_object(Config)
 
 db.init_app(app)
 
-@app.route("/")
-def index():
+@app.route("/login")
+def login():
     return render_template("login.html")
+
+@app.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
+
+@app.route("/projects")
+def projects():
+    return render_template("projects.html")
 
 # =============================================================================
 # CREATE TABLES (SAFE FOR LOCAL + DEPLOY)
