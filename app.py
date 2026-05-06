@@ -8,7 +8,14 @@ import os
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
 db.init_app(app)
+
+# =============================================================================
+# CREATE TABLES (SAFE FOR LOCAL + DEPLOY)
+# =============================================================================
+with app.app_context():
+    db.create_all()
 
 # =============================================================================
 # LOGIN HELPERS
@@ -18,7 +25,6 @@ def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
         if 'user_id' not in session:
-            flash('Please log in first', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return wrap
@@ -28,12 +34,10 @@ def admin_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
         if 'user_id' not in session:
-            flash('Please log in first', 'warning')
             return redirect(url_for('login'))
 
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if not user or not user.is_admin():
-            flash('Admin access required', 'error')
             return redirect(url_for('dashboard'))
 
         return f(*args, **kwargs)
@@ -41,23 +45,21 @@ def admin_required(f):
 
 
 # =============================================================================
-# ROUTES
+# AUTH ROUTES
 # =============================================================================
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-        role = request.form.get('role', 'Member')
-
-        if User.query.filter_by(username=username).first():
-            flash("Username already exists", "error")
+        if User.query.filter_by(username=request.form['username']).first():
             return redirect(url_for('register'))
 
-        user = User(username=username, email=email, role=role)
-        user.set_password(password)
+        user = User(
+            username=request.form['username'],
+            email=request.form['email'],
+            role=request.form.get('role', 'Member')
+        )
+        user.set_password(request.form['password'])
 
         db.session.add(user)
         db.session.commit()
@@ -74,11 +76,10 @@ def login():
 
         if user and user.check_password(request.form['password']):
             session['user_id'] = user.id
-            session['username'] = user.username
             session['role'] = user.role
             return redirect(url_for('dashboard'))
 
-        flash("Invalid credentials", "error")
+        return redirect(url_for('login'))
 
     return render_template("login.html")
 
@@ -89,15 +90,25 @@ def logout():
     return redirect(url_for('login'))
 
 
+# =============================================================================
+# DASHBOARD
+# =============================================================================
+
 @app.route('/')
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session.get('user_id'))
 
-    total = Task.query.filter_by(assigned_to_id=user.id).count()
-    completed = Task.query.filter_by(assigned_to_id=user.id, status='Done').count()
-    pending = Task.query.filter_by(assigned_to_id=user.id, status='Pending').count()
+    if not user:
+        session.clear()
+        return redirect(url_for('login'))
+
+    tasks = Task.query.filter_by(assigned_to_id=user.id)
+
+    total = tasks.count()
+    completed = tasks.filter_by(status='Done').count()
+    pending = tasks.filter_by(status='Pending').count()
 
     overdue = Task.query.filter(
         Task.assigned_to_id == user.id,
@@ -105,18 +116,24 @@ def dashboard():
         Task.due_date < date.today()
     ).count()
 
-    return render_template("dashboard.html",
-                           total=total,
-                           completed=completed,
-                           pending=pending,
-                           overdue=overdue,
-                           user=user)
+    return render_template(
+        "dashboard.html",
+        total=total,
+        completed=completed,
+        pending=pending,
+        overdue=overdue,
+        user=user
+    )
 
+
+# =============================================================================
+# PROJECTS
+# =============================================================================
 
 @app.route('/projects')
 @login_required
 def projects():
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
 
     if user.is_admin():
         projects = Project.query.all()
@@ -135,8 +152,10 @@ def create_project():
             description=request.form['description'],
             user_id=session['user_id']
         )
+
         db.session.add(project)
         db.session.commit()
+
         return redirect(url_for('projects'))
 
     return render_template("project_form.html")
@@ -146,7 +165,7 @@ def create_project():
 @login_required
 def project_detail(project_id):
     project = Project.query.get_or_404(project_id)
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
 
     if not user.is_admin() and project.user_id != user.id:
         return redirect(url_for('projects'))
@@ -180,15 +199,20 @@ def create_task(project_id):
 
         db.session.add(task)
         db.session.commit()
+
         return redirect(url_for('project_detail', project_id=project.id))
 
     return render_template('task_form.html', project=project, users=users)
 
 
+# =============================================================================
+# TASKS
+# =============================================================================
+
 @app.route('/tasks')
 @login_required
 def my_tasks():
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     tasks = Task.query.filter_by(assigned_to_id=user.id).all()
 
     return render_template("tasks.html", tasks=tasks, current_date=date.today())
@@ -198,7 +222,7 @@ def my_tasks():
 @login_required
 def update_task(task_id):
     task = Task.query.get_or_404(task_id)
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
 
     if task.assigned_to_id != user.id and not user.is_admin():
         return redirect(url_for('my_tasks'))
@@ -209,10 +233,18 @@ def update_task(task_id):
     return redirect(url_for('my_tasks'))
 
 
+# =============================================================================
+# TEST
+# =============================================================================
+
 @app.route('/test')
 def test():
     return "App is working"
 
+
+# =============================================================================
+# RUN
+# =============================================================================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
