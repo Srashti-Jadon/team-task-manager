@@ -4,7 +4,6 @@ from models import db, User, Project, Task
 from config import Config
 from datetime import datetime, date
 from functools import wraps
-from flask import request, redirect, render_template, url_for
 import os
 
 app = Flask(__name__)
@@ -12,24 +11,9 @@ app.config.from_object(Config)
 
 db.init_app(app)
 
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        # TODO: validate user here
-        return redirect(url_for("dashboard"))
-
-    return render_template("login.html")
-
-
-@app.route("/dashboard")
-def dashboard():
-    return render_template("dashboard.html")
-
-
-@app.route("/projects")
-def projects():
-    return render_template("projects.html")
+@app.route("/")
+def index():
+    return redirect(url_for("login"))
 
 # =============================================================================
 # CREATE TABLES (SAFE FOR LOCAL + DEPLOY)
