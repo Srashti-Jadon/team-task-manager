@@ -11,8 +11,9 @@ app.config.from_object(Config)
 
 db.init_app(app)
 
-# ❗ IMPORTANT: DO NOT AUTO CREATE TABLES ON RAILWAY
-# Run migrations manually OR ensure DB already exists
+# ❗ IMPORTANT: DO NOT USE create_all() ON RAILWAY
+# Railway DB should be managed externally (Postgres already has tables)
+
 
 # =============================================================================
 # ROOT
@@ -26,28 +27,27 @@ def index():
 
 
 # =============================================================================
-# CREATE ADMIN (SAFE FOR PRODUCTION)
+# CREATE ADMIN (SAFE)
 # =============================================================================
 
 @app.route('/create-admin')
 def create_admin():
-    with app.app_context():
-        user = User.query.filter_by(email="admin@gmail.com").first()
+    user = User.query.filter_by(email="admin@gmail.com").first()
 
-        if not user:
-            admin = User(
-                username="admin",
-                email="admin@gmail.com",
-                role="Admin"
-            )
-            admin.set_password("admin123")
+    if not user:
+        admin = User(
+            username="admin",
+            email="admin@gmail.com",
+            role="Admin"
+        )
+        admin.set_password("admin123")
 
-            db.session.add(admin)
-            db.session.commit()
+        db.session.add(admin)
+        db.session.commit()
 
-            return "Admin created successfully"
+        return "Admin created successfully"
 
-        return "Admin already exists"
+    return "Admin already exists"
 
 
 # =============================================================================
@@ -69,7 +69,7 @@ def admin_required(f):
         if 'user_id' not in session:
             return redirect(url_for('login'))
 
-        user = db.session.get(User, session['user_id'])
+        user = User.query.get(session['user_id'])
         if not user or not user.is_admin():
             return redirect(url_for('dashboard'))
 
@@ -89,7 +89,7 @@ def register():
         username = request.form['username']
         password = request.form['password']
 
-        role = "Member"  # forced
+        role = "Member"
 
         if User.query.filter_by(email=email).first():
             flash("Email already registered", "error")
@@ -99,7 +99,12 @@ def register():
             flash("Username already taken", "error")
             return redirect(url_for("register"))
 
-        user = User(username=username, email=email, role=role)
+        user = User(
+            username=username,
+            email=email,
+            role=role
+        )
+
         user.set_password(password)
 
         db.session.add(user)
@@ -135,13 +140,24 @@ def logout():
 
 
 # =============================================================================
-# DASHBOARD
+# DASHBOARD (FIXED SAFELY)
 # =============================================================================
 
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    user = db.session.get(User, session['user_id'])
+
+    user_id = session.get('user_id')
+
+    if not user_id:
+        session.clear()
+        return redirect(url_for('login'))
+
+    user = User.query.get(user_id)
+
+    if not user:
+        session.clear()
+        return redirect(url_for('login'))
 
     tasks = Task.query.filter_by(assigned_to_id=user.id)
 
@@ -172,7 +188,7 @@ def dashboard():
 @app.route('/projects')
 @login_required
 def projects():
-    user = db.session.get(User, session['user_id'])
+    user = User.query.get(session['user_id'])
 
     if user.is_admin():
         projects = Project.query.all()
@@ -203,8 +219,9 @@ def create_project():
 @app.route('/project/<int:project_id>')
 @login_required
 def project_detail(project_id):
+
     project = Project.query.get_or_404(project_id)
-    user = db.session.get(User, session['user_id'])
+    user = User.query.get(session['user_id'])
 
     if not user.is_admin() and project.user_id != user.id:
         return redirect(url_for('projects'))
@@ -223,6 +240,7 @@ def project_detail(project_id):
 @app.route('/project/<int:project_id>/task/new', methods=['GET', 'POST'])
 @admin_required
 def create_task(project_id):
+
     project = Project.query.get_or_404(project_id)
     users = User.query.all()
 
@@ -251,7 +269,7 @@ def create_task(project_id):
 @app.route('/tasks')
 @login_required
 def my_tasks():
-    user = db.session.get(User, session['user_id'])
+    user = User.query.get(session['user_id'])
     tasks = Task.query.filter_by(assigned_to_id=user.id).all()
 
     return render_template("tasks.html", tasks=tasks, current_date=date.today())
@@ -260,8 +278,9 @@ def my_tasks():
 @app.route('/task/<int:task_id>/update', methods=['POST'])
 @login_required
 def update_task(task_id):
+
     task = Task.query.get_or_404(task_id)
-    user = db.session.get(User, session['user_id'])
+    user = User.query.get(session['user_id'])
 
     if task.assigned_to_id != user.id and not user.is_admin():
         return redirect(url_for('my_tasks'))
@@ -282,7 +301,7 @@ def test():
 
 
 # =============================================================================
-# RUN (IMPORTANT FOR RAILWAY)
+# RUN
 # =============================================================================
 
 if __name__ == "__main__":
