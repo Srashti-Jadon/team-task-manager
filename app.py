@@ -10,8 +10,13 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 db.init_app(app)
-with app.app_context():
-    db.create_all()
+
+# ❗ IMPORTANT: DO NOT AUTO CREATE TABLES ON RAILWAY
+# Run migrations manually OR ensure DB already exists
+
+# =============================================================================
+# ROOT
+# =============================================================================
 
 @app.route("/")
 def index():
@@ -19,30 +24,31 @@ def index():
         return redirect(url_for("dashboard"))
     return redirect(url_for("login"))
 
+
+# =============================================================================
+# CREATE ADMIN (SAFE FOR PRODUCTION)
+# =============================================================================
+
 @app.route('/create-admin')
 def create_admin():
-    user = User.query.filter_by(email="admin@gmail.com").first()
+    with app.app_context():
+        user = User.query.filter_by(email="admin@gmail.com").first()
 
-    if not user:
-        admin = User(
-            username="admin",
-            email="admin@gmail.com",
-            role="Admin"
-        )
-        admin.set_password("admin123")
+        if not user:
+            admin = User(
+                username="admin",
+                email="admin@gmail.com",
+                role="Admin"
+            )
+            admin.set_password("admin123")
 
-        db.session.add(admin)
-        db.session.commit()
+            db.session.add(admin)
+            db.session.commit()
 
-        return "Admin created successfully"
+            return "Admin created successfully"
 
-    return "Admin already exists"
+        return "Admin already exists"
 
-# =============================================================================
-# CREATE TABLES (SAFE FOR LOCAL + DEPLOY)
-# =============================================================================
-#with app.app_context():
- #   db.create_all()
 
 # =============================================================================
 # LOGIN HELPERS
@@ -72,7 +78,7 @@ def admin_required(f):
 
 
 # =============================================================================
-# AUTH ROUTES
+# AUTH
 # =============================================================================
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -83,31 +89,23 @@ def register():
         username = request.form['username']
         password = request.form['password']
 
-        # 🔒 Force role = Member ONLY
-        role = "Member"
+        role = "Member"  # forced
 
-        # check duplicate email
         if User.query.filter_by(email=email).first():
-            flash("Email already registered. Please login.", "error")
+            flash("Email already registered", "error")
             return redirect(url_for("register"))
 
-        # check duplicate username
         if User.query.filter_by(username=username).first():
-            flash("Username already taken.", "error")
+            flash("Username already taken", "error")
             return redirect(url_for("register"))
 
-        user = User(
-            username=username,
-            email=email,
-            role=role
-        )
-
+        user = User(username=username, email=email, role=role)
         user.set_password(password)
 
         db.session.add(user)
         db.session.commit()
 
-        flash("Registration successful! Please login.", "success")
+        flash("Registration successful", "success")
         return redirect(url_for("login"))
 
     return render_template("register.html")
@@ -116,6 +114,7 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+
         user = User.query.filter_by(username=request.form['username']).first()
 
         if user and user.check_password(request.form['password']):
@@ -123,6 +122,7 @@ def login():
             session['role'] = user.role
             return redirect(url_for('dashboard'))
 
+        flash("Invalid credentials", "error")
         return redirect(url_for('login'))
 
     return render_template("login.html")
@@ -141,11 +141,7 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    user = db.session.get(User, session.get('user_id'))
-
-    if not user:
-        session.clear()
-        return redirect(url_for('login'))
+    user = db.session.get(User, session['user_id'])
 
     tasks = Task.query.filter_by(assigned_to_id=user.id)
 
@@ -286,7 +282,7 @@ def test():
 
 
 # =============================================================================
-# RUN
+# RUN (IMPORTANT FOR RAILWAY)
 # =============================================================================
 
 if __name__ == "__main__":
