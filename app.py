@@ -15,7 +15,28 @@ with app.app_context():
 
 @app.route("/")
 def index():
+    if 'user_id' in session:
+        return redirect(url_for("dashboard"))
     return redirect(url_for("login"))
+
+@app.route('/create-admin')
+def create_admin():
+    user = User.query.filter_by(email="admin@gmail.com").first()
+
+    if not user:
+        admin = User(
+            username="admin",
+            email="admin@gmail.com",
+            role="Admin"
+        )
+        admin.set_password("admin123")
+
+        db.session.add(admin)
+        db.session.commit()
+
+        return "Admin created successfully"
+
+    return "Admin already exists"
 
 # =============================================================================
 # CREATE TABLES (SAFE FOR LOCAL + DEPLOY)
@@ -57,20 +78,37 @@ def admin_required(f):
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        if User.query.filter_by(username=request.form['username']).first():
-            return redirect(url_for('register'))
+
+        email = request.form['email']
+        username = request.form['username']
+        password = request.form['password']
+
+        # 🔒 Force role = Member ONLY
+        role = "Member"
+
+        # check duplicate email
+        if User.query.filter_by(email=email).first():
+            flash("Email already registered. Please login.", "error")
+            return redirect(url_for("register"))
+
+        # check duplicate username
+        if User.query.filter_by(username=username).first():
+            flash("Username already taken.", "error")
+            return redirect(url_for("register"))
 
         user = User(
-            username=request.form['username'],
-            email=request.form['email'],
-            role=request.form.get('role', 'Member')
+            username=username,
+            email=email,
+            role=role
         )
-        user.set_password(request.form['password'])
+
+        user.set_password(password)
 
         db.session.add(user)
         db.session.commit()
 
-        return redirect(url_for('login'))
+        flash("Registration successful! Please login.", "success")
+        return redirect(url_for("login"))
 
     return render_template("register.html")
 
